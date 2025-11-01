@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block head_extra %}
+<style>
+.result-count{font-size:13.5px;color:var(--muted);margin:2px 0 10px}
+.search{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin:0 0 12px}
+.search .input-wrap{position:relative}
+.search input[type="search"]{width:100%;height:38px;border:1px solid var(--border);border-radius:12px;background:#fff;padding:0 34px 0 32px;font-size:15px;outline:none}
+.search input::placeholder{color:#9b9ba1}
+.search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-ring)}
+.search .icon{position:absolute;left:10px;top:50%;transform:translateY(-49%);width:15px;height:15px;opacity:.55}
+.layout{display:grid;grid-template-columns:340px 1fr;gap:16px}
+@media (max-width: 980px){.layout{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.card-title{padding:12px 14px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center}
+.count-badge{margin-left:auto;font-size:13px;color:var(--muted)}
+.card-body{padding:14px}
+.result-list{max-height:72vh;overflow:auto}
+.result-item{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.result-item:last-child{border-bottom:none}
+.result-item:hover{background:#f5f5f7}
+.result-item.selected{background:var(--selected);outline:1px solid var(--selected-border)}
+.result-title{font-size:15px;font-weight:500;margin:0 0 2px}
+.result-meta{font-size:13.5px;color:var(--muted)}
+.viewer .meta{font-size:13.5px;color:var(--muted);margin-bottom:6px}
+.viewer .question{font-size:17px;font-weight:600;margin:2px 0 6px}
+.viewer .type{font-size:13.5px;color:var(--muted);margin-bottom:10px}
+.answers{margin-top:6px}
+.answer-chip{display:inline-block;padding:.36rem .55rem;margin:.2rem .2rem 0 0;border-radius:999px;background:var(--chip);border:1px solid var(--chip-border);font-size:14px}
+.answer-chip.correct{background:var(--chip-correct-bg);border-color:var(--chip-correct-border);color:var(--chip-correct-text);font-weight:500}
+.answer-chip.order{background:var(--chip-order-bg);border-color:var(--chip-order-border);color:var(--chip-order-text)}
+.answer-media{margin:.3rem 0}
+.answer-media .answer-idx{display:inline-block;min-width:1.6rem;color:var(--muted);font-size:13.5px;margin-right:.4rem}
+.answer-media img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);vertical-align:middle}
+.answer-media.correct img{border-color:var(--chip-correct-border);box-shadow:0 0 0 2px rgba(11,107,43,.12)}
+.img-error{color:var(--danger);font-size:13.5px;font-weight:500;display:inline-block;padding:2px 0}
+.divider{height:1px;border:0;background:var(--border);margin:12px 0}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="search">
+  <div class="input-wrap">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79L20 21.5 21.5 20l-6-6zM4 9.5C4 6.46 6.46 4 9.5 4S15 6.46 15 9.5 12.54 15 9.5 15 4 12.54 4 9.5z"/></svg>
+    <input id="search-input" type="search" placeholder="Поиск по тексту вопроса…" autocomplete="off" />
+  </div>
+  <button id="clear-search" class="btn">Сброс</button>
+</div>
+<div id="result-count" class="result-count"></div>
+
+<div class="layout">
+  <aside class="card">
+    <div class="card-title">Результаты <span id="result-badge" class="count-badge">0</span></div>
+    <div id="result-list" class="card-body result-list"></div>
+  </aside>
+  <main class="card viewer">
+    <div class="card-body">
+      <div id="view-meta" class="meta"></div>
+      <div id="view-question" class="question"></div>
+      <div id="view-type" class="type"></div>
+      <hr class="divider"/>
+      <div id="view-answers" class="answers"></div>
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block body_extra %}
+<script>
+  // asset base
+  window.ASSET_BASE = {{ asset_base | tojson }};
+
+  function normalize(s){return (s||'').toString().toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim()}
+  function escapeHtml(s){const m={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};return (s||'').replace(/[&<>"']/g,c=>m[c])}
+  function htmlToText(html){const d=document.createElement('div');d.innerHTML=html||'';return (d.textContent||'').trim()}
+  function highlightPlain(htmlLike, q){
+    const plain=htmlToText(htmlLike); if(!q) return escapeHtml(plain);
+    const safe=escapeHtml(plain), words=normalize(q).split(' ').filter(Boolean)
+    let out=safe; words.forEach(w=>{const r=new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'); out=out.replace(r,m=>`<mark>${m}</mark>`);})
+    return out
+  }
+  function scoreQuestion(qtext,q){if(!q)return 0;const n=normalize(htmlToText(qtext)), k=normalize(q), i=n.indexOf(k);if(i>=0)return 10000-i-Math.min(n.length,10000)/50;let h=0;k.split(' ').filter(Boolean).forEach(w=>{if(n.includes(w))h++});return h}
+  function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
+
+  // sanitizer + IMG fallback + МЭПТИНГ ТОЛЬКО ПО ИМЕНИ ФАЙЛА
+  const ALLOWED_TAGS=new Set(['B','STRONG','I','EM','U','S','BR','IMG','SUP','SUB','SMALL','CODE','PRE','SPAN'])
+  const ALLOWED_ATTR={'IMG':new Set(['src','alt','title','width','height','loading'])}
+  function isSafeSrc(src){if(!src)return false;const s=src.trim();if(/^\s*javascript:/i.test(s))return false;return /^(\.{0,2}\/|\/|https?:\/\/|data:image\/|[^:]+$)/i.test(s)}
+  function toAssetByBasename(val){
+    const base = window.ASSET_BASE || ''
+    // если абсолютная ссылка или data:, не трогаем
+    const v0 = (val||'').trim().replace(/\\/g,'/')
+    if (/^(https?:)?\/\//i.test(v0) || v0.startsWith('data:') || v0.startsWith('/')) return v0
+    // иначе берём только имя файла
+    const parts = v0.split('/')
+    const basename = parts[parts.length-1] || v0
+    return base + basename
+  }
+  function sanitizeAndHighlightInto(el, rawHtml, query){
+    const tpl=document.createElement('template');tpl.innerHTML=rawHtml||'';const frag=document.createDocumentFragment()
+    const q=(query||'').trim();const re=q?new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'):null
+    function walk(node,parent){
+      if(node.nodeType===Node.TEXT_NODE){
+        const t=node.nodeValue||'';if(!re){parent.appendChild(document.createTextNode(t));return}
+        let last=0,m;while((m=re.exec(t))!==null){if(m.index>last)parent.appendChild(document.createTextNode(t.slice(last,m.index)));const mk=document.createElement('mark');mk.textContent=t.slice(m.index,re.lastIndex);parent.appendChild(mk);last=re.lastIndex}
+        if(last<t.length)parent.appendChild(document.createTextNode(t.slice(last)));return
+      }
+      if(node.nodeType===Node.ELEMENT_NODE){
+        const tag=node.tagName.toUpperCase(); if(!ALLOWED_TAGS.has(tag)){node.childNodes.forEach(c=>walk(c,parent));return}
+        const out=document.createElement(tag)
+        if(ALLOWED_ATTR[tag]) for(const a of ALLOWED_ATTR[tag]){let v=node.getAttribute(a); if(v!=null){ if(tag==='IMG'&&a==='src'){ v=toAssetByBasename(v); if(!isSafeSrc(v)) continue; out.setAttribute('src',v)} else out.setAttribute(a,v)}}
+        if(tag==='IMG'){
+          if(!out.getAttribute('loading')) out.setAttribute('loading','lazy')
+          out.addEventListener('error',()=>{const w=document.createElement('span');w.className='img-error';w.textContent='Не удалось загрузить изображение: '+(out.getAttribute('src')||''); out.replaceWith(w)},{once:true})
+        }
+        parent.appendChild(out); node.childNodes.forEach(c=>walk(c,out)); return
+      }
+    }
+    tpl.content.childNodes.forEach(n=>walk(n,frag)); el.innerHTML=''; el.appendChild(frag)
+  }
+
+  const DATA = {{ data_json | tojson }};
+  const all=[]
+  Object.keys(DATA).forEach(gid=>{
+    (DATA[gid].questions||[]).forEach((q,idx)=>{all.push({groupId:gid,index:idx,id:q.id||String(idx),question:q.question||'',type:q.type||1,right:q.right||1,answers:Array.isArray(q.answers)?q.answers.slice():[]})})
+  })
+
+  const $search=document.getElementById('search-input'), $clear=document.getElementById('clear-search')
+  const $result=document.getElementById('result-list'), $badge=document.getElementById('result-badge'), $count=document.getElementById('result-count')
+  const $viewQ=document.getElementById('view-question'), $viewMeta=document.getElementById('view-meta'), $viewType=document.getElementById('view-type'), $viewAns=document.getElementById('view-answers')
+  let current=null
+
+  function renderTypeInfo(q){
+    const t=Number(q.type||1), map={
+      1:'Одиночный выбор: правильный — первый вариант.',
+      2:'Множественный выбор: правильные — первые '+(q.right||1)+' вариантов.',
+      3:'Упорядочивание: правильный порядок как в данных.',
+      6:'Соответствия / порядок.',
+      7:'Свободный ввод: допустимые ответы ниже.'
+    }
+    return map[t] || 'Тип неизвестен'
+  }
+  function renderAnswerNode(container, html, classes){
+    const hasImg=/<img(\s|>)/i.test(html||'')
+    if(hasImg){
+      const wrap=document.createElement('div'); wrap.className='answer-media'+(classes.includes('correct')?' correct':'')
+      const idx=classes.find(c=>c.startsWith('idx-')); if(idx){const s=document.createElement('span');s.className='answer-idx';s.textContent=idx.replace('idx-','')+'.';wrap.appendChild(s)}
+      const content=document.createElement('span'); sanitizeAndHighlightInto(content, html||'', ($search.value||'').trim()); wrap.appendChild(content); container.appendChild(wrap)
+    }else{
+      const chip=document.createElement('span'); chip.className='answer-chip '+classes.join(' ')
+      sanitizeAndHighlightInto(chip, html||'', ($search.value||'').trim()); container.appendChild(chip)
+    }
+  }
+  function renderAnswers(q){
+    $viewAns.innerHTML=''
+    const t=Number(q.type||1), answers=q.answers||[], right=Number(q.right||1)
+    if(!answers.length){const d=document.createElement('div');d.className='result-count';d.textContent='Нет данных по ответам.';$viewAns.appendChild(d);return}
+    if(t===1){answers.forEach((a,i)=>renderAnswerNode($viewAns,a,(i===0?['correct']:[])))
+    }else if(t===2){answers.forEach((a,i)=>renderAnswerNode($viewAns,a,(i<right?['correct']:[])))
+    }else if(t===3||t===6){answers.forEach((a,i)=>renderAnswerNode($viewAns,a,['order','idx-'+(i+1)]))
+    }else if(t===7){answers.forEach(a=>renderAnswerNode($viewAns,a,['correct']))}
+  }
+  function selectResultById(id){
+    $result.querySelectorAll('.result-item').forEach(el=>el.classList.toggle('selected', el.getAttribute('data-id')===id))
+    const t=$result.querySelector('.result-item[data-id="'+id+'"]'); if(t) t.scrollIntoView({block:'nearest'})
+  }
+  function viewQuestion(q, opts){opts=opts||{highlightQuery:''}; current=q; sanitizeAndHighlightInto($viewQ, q.question||'', opts.highlightQuery||''); $viewMeta.textContent='ID: '+q.id; $viewType.textContent=renderTypeInfo(q); renderAnswers(q); selectResultById(q.id); const newHash='#q='+encodeURIComponent(q.id); if(location.hash!==newHash) history.replaceState(null,'',newHash)}
+  function resultItemTemplate(q, query){const title=highlightPlain(q.question, query); return `<div class="result-item" data-id="${q.id}"><div class="result-title">${title}</div><div class="result-meta">ID: ${q.id} • Тип: ${q.type} • Ответов: ${q.answers.length}</div></div>`}
+  function attachItemClicks(){Array.from($result.querySelectorAll('.result-item')).forEach(el=>el.addEventListener('click',()=>{const id=el.getAttribute('data-id');const q=all.find(x=>x.id===id); if(q) viewQuestion(q,{highlightQuery:$search.value})}))}
+  function applyResults(list, query){$result.innerHTML=list.map(q=>resultItemTemplate(q,query)).join('');$badge.textContent=list.length;$count.textContent=list.length?('Найдено: '+list.length):'Ничего не найдено';attachItemClicks()}
+  function runSearch(){const q=$search.value.trim(); if(!q){applyResults(all,''); if(!current&&all.length) viewQuestion(all[0],{highlightQuery:''}); return}
+    const scored=all.map(item=>({ item, score:scoreQuestion(item.question,q) })).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).map(x=>x.item)
+    applyResults(scored,q); if(scored.length) viewQuestion(scored[0],{highlightQuery:q})
+  }
+  const debouncedSearch=debounce(runSearch,120)
+  $search.addEventListener('input',debouncedSearch)
+  $clear.addEventListener('click',()=>{$search.value='';$search.focus();runSearch()})
+  window.addEventListener('keydown',e=>{if(e.key==='/'&&document.activeElement!==$search){e.preventDefault();$search.focus()}})
+  function openFromHash(){const m=location.hash.match(/#q=([^&]+)/);applyResults(all,''); if(m){const id=decodeURIComponent(m[1]); const q=all.find(x => x.id===id); if(q){viewQuestion(q,{highlightQuery:''}); return true}} return false}
+  if(!openFromHash()) runSearch()
+</script>
+{% endblock %}

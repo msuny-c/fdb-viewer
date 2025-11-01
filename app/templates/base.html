@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title or "FDB Viewer" }}</title>
+  <style>
+    :root{
+      color-scheme: light;
+      --bg:#f5f5f7;--surface:#fff;--border:#d2d2d7;--text:#1d1d1f;--muted:#6e6e73;
+      --blue:#0a84ff;--blue-ring:rgba(10,132,255,.22);
+      --chip:#f2f2f7;--chip-border:#e5e5ea;--chip-correct-bg:#eaf6ee;--chip-correct-border:#cdebd6;--chip-correct-text:#0b6b2b;
+      --chip-order-bg:#fff7e6;--chip-order-border:#ffe1a1;--chip-order-text:#7a5200;
+      --highlight:#fff3b0;--selected:#e7f0ff;--selected-border:#c9dcff;--danger:#d92d20;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;
+      font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    }
+    .container{max-width:1100px;margin:0 auto;padding:0 22px}
+    .topbar{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+    .topbar .row{display:flex;align-items:center;height:56px}
+    .topbar h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.2px}
+    .hint{margin-left:auto;color:var(--muted);font-size:13px;display:flex;align-items:center;gap:10px}
+    .kbd{display:inline-block;padding:0 .36rem;border:1px solid var(--border);border-radius:7px;background:#fafafa;font-size:12.5px}
+    .btn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--text);font-size:14px;cursor:pointer}
+    .btn:hover{background:#f7f7f7}.btn:active{background:#f0f0f0}
+    mark{background:none;box-shadow:inset 0 -0.35em var(--highlight);border-radius:0;padding:0}
+
+    /* Modal (native <dialog>) — увеличил ширину */
+    dialog.modal{border:1px solid var(--border);border-radius:12px;padding:0;width:760px;max-width:calc(100% - 24px)}
+    dialog::backdrop{background:rgba(0,0,0,.25)}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+    .modal-title{font-weight:600;font-size:15px}
+    .modal-body{padding:14px}
+    .field{margin:10px 0}
+    .field label{display:block;font-size:13.5px;color:var(--muted);margin-bottom:6px}
+    .input{border:1px solid var(--border);border-radius:10px;background:#fff;padding:10px}
+    .muted{color:var(--muted);font-size:13px}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--border)}
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <div class="row">
+        <h1>FDB Viewer</h1>
+        <div class="hint">
+          <span class="kbd">/</span> — фокус поиска
+          <button id="open-upload" class="btn">Загрузить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Upload -->
+  <dialog id="upload-modal" class="modal">
+    <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+      <div class="modal-header">
+        <div class="modal-title">Загрузка</div>
+        <!-- кнопка закрыть убрана -->
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>.fdb файл <span class="muted">(обязательно)</span></label>
+          <input class="input" type="file" name="fdb" accept=".fdb" required>
+        </div>
+        <div class="field">
+          <label>Папки с картинками (опционально; можно выбрать несколько)</label>
+          <input class="input" type="file" name="dirs" webkitdirectory directory multiple>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" type="submit">Загрузить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="container" style="padding:16px 22px 22px;">
+    {% block content %}{% endblock %}
+  </div>
+
+  <script>
+    // Modal open/close (без кнопки закрыть)
+    const modal = document.getElementById('upload-modal');
+    document.getElementById('open-upload')?.addEventListener('click', ()=> modal.showModal());
+    modal?.addEventListener('click', (e)=>{ if(e.target===modal) modal.close(); });
+  </script>
+
+  {% block body_extra %}{% endblock %}
+</body>
+</html>

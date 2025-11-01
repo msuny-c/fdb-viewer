@@ -1,0 +1,16 @@
+.venv
+venv
+data
+storage
+*.pyc
+__pycache__/
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.DS_Store
+.DS_Store?
+Thumbs.db
+*.ipynb_checkpoints
+*.env*

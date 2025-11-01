@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card" style="padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);">
+    <h2 style="margin:0 0 8px;font-size:17px;font-weight:600;">Начните с загрузки .fdb</h2>
+    <p class="muted" style="margin:6px 0 12px;">
+      Нажмите «Загрузить» в шапке. Обязателен файл <code>.fdb</code>.
+      Картинки добавляйте <b>папками</b> (можно несколько).
+    </p>
+    <button id="cta-open" class="btn">Загрузить</button>
+  </div>
+  <script>
+    document.getElementById('cta-open')?.addEventListener('click', ()=> document.getElementById('upload-modal').showModal());
+  </script>
+{% endblock %}
