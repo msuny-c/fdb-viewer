@@ -16,7 +16,7 @@ app = FastAPI(title="FDB Viewer")
 templates = Jinja2Templates(directory="app/templates")
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
-# Раздача ассетов: /s/<doc_id>/assets/<file>
+# Раздача ассетов: /s/<doc_id>/assets/<FILE>
 app.mount("/s", StaticFiles(directory=STORAGE_DIR), name="storage")
 
 engine = make_engine()
@@ -39,13 +39,16 @@ def _unique_target(path: str) -> str:
             return cand
         i += 1
 
-def _save_assets_flat(doc_id: str, files: List[UploadFile]):
+def _save_assets_flat_upper(doc_id: str, files: List[UploadFile]):
     """
-    Сохраняет изображения ПЛОСКО в storage/<doc_id>/assets/<basename>.
-    Директории из исходного имени игнорируются. Конфликты имен -> -1, -2, ...
+    Сохраняет изображения ПЛОСКО в storage/<doc_id>/assets/<BASENAME_UPPER>.
+    - Директории игнорируются.
+    - Имя файла переводится в ВЕРХНИЙ РЕГИСТР (включая расширение).
+    - Конфликты имён -> суффиксы -1, -2, ...
     """
     base = os.path.join(STORAGE_DIR, doc_id, "assets")
     os.makedirs(base, exist_ok=True)
+
     for f in files or []:
         name = f.filename or ""
         if not name:
@@ -53,11 +56,17 @@ def _save_assets_flat(doc_id: str, files: List[UploadFile]):
         basename = os.path.basename(name)
         if not basename:
             continue
-        ext = os.path.splitext(basename)[1].lower()
-        if ext not in ALLOWED_IMG_EXT:
+
+        # Проверяем по исходному расширению (в нижнем регистре)
+        ext_lower = os.path.splitext(basename)[1].lower()
+        if ext_lower not in ALLOWED_IMG_EXT:
             continue
-        target = os.path.join(base, basename)
+
+        # Приводим имя к UPPERCASE (и base, и ext)
+        basename_upper = basename.upper()
+        target = os.path.join(base, basename_upper)
         target = _unique_target(target)
+
         with open(target, "wb") as out:
             out.write(await_read(f))
 
@@ -72,7 +81,7 @@ async def upload(
 ):
     """
     Принимает .fdb и (опционально) набор папок с картинками.
-    Картинки сохраняются плоско по basename в /assets.
+    Картинки сохраняются плоско по BASENAME в UPPER CASE в /assets.
     """
     # читаем fdb
     raw_bytes = await_read(fdb)
@@ -89,9 +98,9 @@ async def upload(
     # создаём документ
     doc_id = insert_doc(engine, grouped_questions, title=(fdb.filename or None))
 
-    # сохраняем ассеты ПЛОСКО (только из папок)
+    # сохраняем ассеты ПЛОСКО и В ВЕРХНЕМ РЕГИСТРЕ (только из папок)
     if dirs:
-        _save_assets_flat(doc_id, dirs)
+        _save_assets_flat_upper(doc_id, dirs)
 
     return RedirectResponse(url=f"/{doc_id}", status_code=303)
 

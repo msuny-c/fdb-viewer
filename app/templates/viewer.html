@@ -81,18 +81,18 @@
   function scoreQuestion(qtext,q){if(!q)return 0;const n=normalize(htmlToText(qtext)), k=normalize(q), i=n.indexOf(k);if(i>=0)return 10000-i-Math.min(n.length,10000)/50;let h=0;k.split(' ').filter(Boolean).forEach(w=>{if(n.includes(w))h++});return h}
   function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
 
-  // sanitizer + IMG fallback + МЭПТИНГ ТОЛЬКО ПО ИМЕНИ ФАЙЛА
+  // sanitizer + IMG fallback + МЭППИНГ ТОЛЬКО ПО ИМЕНИ ФАЙЛА (UPPER CASE)
   const ALLOWED_TAGS=new Set(['B','STRONG','I','EM','U','S','BR','IMG','SUP','SUB','SMALL','CODE','PRE','SPAN'])
   const ALLOWED_ATTR={'IMG':new Set(['src','alt','title','width','height','loading'])}
   function isSafeSrc(src){if(!src)return false;const s=src.trim();if(/^\s*javascript:/i.test(s))return false;return /^(\.{0,2}\/|\/|https?:\/\/|data:image\/|[^:]+$)/i.test(s)}
-  function toAssetByBasename(val){
+  function toAssetByBasenameUpper(val){
     const base = window.ASSET_BASE || ''
-    // если абсолютная ссылка или data:, не трогаем
     const v0 = (val||'').trim().replace(/\\/g,'/')
+    // Абсолютные URL и data: не трогаем
     if (/^(https?:)?\/\//i.test(v0) || v0.startsWith('data:') || v0.startsWith('/')) return v0
-    // иначе берём только имя файла
+    // Берём только basename и переводим в UPPER CASE
     const parts = v0.split('/')
-    const basename = parts[parts.length-1] || v0
+    const basename = (parts[parts.length-1] || v0).toUpperCase()
     return base + basename
   }
   function sanitizeAndHighlightInto(el, rawHtml, query){
@@ -107,7 +107,7 @@
       if(node.nodeType===Node.ELEMENT_NODE){
         const tag=node.tagName.toUpperCase(); if(!ALLOWED_TAGS.has(tag)){node.childNodes.forEach(c=>walk(c,parent));return}
         const out=document.createElement(tag)
-        if(ALLOWED_ATTR[tag]) for(const a of ALLOWED_ATTR[tag]){let v=node.getAttribute(a); if(v!=null){ if(tag==='IMG'&&a==='src'){ v=toAssetByBasename(v); if(!isSafeSrc(v)) continue; out.setAttribute('src',v)} else out.setAttribute(a,v)}}
+        if(ALLOWED_ATTR[tag]) for(const a of ALLOWED_ATTR[tag]){let v=node.getAttribute(a); if(v!=null){ if(tag==='IMG'&&a==='src'){ v=toAssetByBasenameUpper(v); if(!isSafeSrc(v)) continue; out.setAttribute('src',v)} else out.setAttribute(a,v)}}
         if(tag==='IMG'){
           if(!out.getAttribute('loading')) out.setAttribute('loading','lazy')
           out.addEventListener('error',()=>{const w=document.createElement('span');w.className='img-error';w.textContent='Не удалось загрузить изображение: '+(out.getAttribute('src')||''); out.replaceWith(w)},{once:true})
